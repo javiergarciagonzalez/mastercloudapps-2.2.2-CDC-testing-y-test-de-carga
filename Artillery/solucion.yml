@@ -1,0 +1,138 @@
+config:
+  plugins:
+    expect: { }
+  target: 'https://localhost:8443/api'
+  tls:
+    rejectUnauthorized: false
+  phases:
+    - duration: 40
+      name: "Artillery tests"
+      arrivalRate: 5
+  http:
+    pool: 8
+  payload:
+    path: "books.csv"
+    fields:
+      - "title"
+      - "description"
+  variables:
+    username:
+      - "user"
+    userpass:
+      - "pass"
+    adminname:
+      - "admin"
+    adminpass:
+      - "pass"
+  ensure:
+    p95: 100
+    maxErrorRate: 0
+
+scenarios:
+  - name: "Scenario 1 - Getting first book"
+    weight: 7
+    flow:
+      - get:
+          url: "/books/"
+          capture:
+            - json: "$[0].id"
+            - as: id
+            - json: "$[0].description"
+            - as: description
+          expect:
+            statusCode: 200
+            contentType: json
+      - get:
+          url: "/books/{{ id }}"
+          json: "$"
+          capture:
+            json: "$.description"
+            as: "expected_description"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - equals:
+                - "{{ description }}"
+                - "{{ expected_description }}"
+
+  - name: "Scenario 2 - Creating a book"
+    weight: 2
+    flow:
+      - get:
+          url: "/login"
+          auth:
+            user: "{{ username }}"
+            pass: "{{ userpass }}"
+          expect:
+            statusCode: 200
+      - post:
+          url: "/books/"
+          json:
+            title: "{{ title }}"
+            description: "{{ description }}"
+          capture:
+            - json: "$.id"
+            - as: id
+            - json: "$.title"
+            - as: new_book_title
+          expect:
+            statusCode: 201
+            contentType: json
+      - get:
+          url: "/books/{{ id }}"
+          capture:
+            - json: "$.id"
+            - as: id
+            - json: "$.title"
+            - as: new_book_title
+          expect:
+            statusCode: 200
+            contentType: json
+            equals:
+              - "{{ title }}"
+              - "{{ new_book_title }}"
+
+  - name: "Scenario 3 - Deleting a book"
+    weight: 1
+    flow:
+      - get:
+          url: "/login"
+          auth:
+            user: "{{ adminname }}"
+            pass: "{{ adminpass }}"
+          expect:
+            statusCode: 200
+      - post:
+          url: "/books/"
+          json:
+            title: "{{ title }}"
+            description: "{{ description }}"
+          capture:
+            - json: "$.id"
+            - as: id
+            - json: "$.title"
+            - as: new_book_title
+            - json: "$.description"
+            - as: new_book_description
+          expect:
+            - statusCode: 201
+            - contentType: json
+            - equals:
+              - "{{ title }}"
+              - "{{ new_book_title }}"
+              - "{{ description }}"
+              - "{{ new_book_description }}"
+      - get:
+          url: "/books/{{ id }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - equals:
+      - delete:
+          url: "/books/{{ id }}"
+          expect:
+            statusCode: 204
+      - get:
+          url: "/books/{{ id }}"
+          expect:
+            statusCode: 404
